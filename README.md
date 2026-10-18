@@ -1,7 +1,7 @@
 # J.A.R.V.I.S.
 
-A local Stark-style assistant for macOS, Windows and Linux: voice in, voice
-out, hand and body tracking, 3D models you turn with your hands, and real
+A local Stark-style assistant, tested on macOS (Windows and Linux installers
+included, not yet tested): voice in, voice out, hand and body tracking, 3D models you turn with your hands, and real
 control of the machine — all behind an interface built to look like the one
 in the films.
 
