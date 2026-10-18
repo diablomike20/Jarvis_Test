@@ -1,9 +1,83 @@
 # J.A.R.V.I.S.
 
-A local Stark-style assistant, tested on macOS (Windows and Linux installers
-included, not yet tested): voice in, voice out, hand and body tracking, 3D models you turn with your hands, and real
-control of the machine — all behind an interface built to look like the one
-in the films.
+A voice and hand-gesture assistant behind a heads-up interface built to look
+like the one in the Iron Man films. It wakes to its name and answers aloud,
+tracks your hand through the webcam, and puts 3D CAD models in the interface
+for you to turn with your hand and change by voice. Tested on macOS (Windows
+and Linux installers included, not yet tested). Control of the Mac's keyboard,
+mouse and windows is written but waits on macOS's Accessibility permission,
+not yet granted on the test machine.
+
+A live screen recording of the hand-driven model viewer:
+[parahuman.net/#jarvis](https://parahuman.net/#jarvis). Full reference:
+[docs/MANUAL.md](docs/MANUAL.md).
+
+## What it does
+
+**Voice.** Say “Jarvis” and it wakes; “Jarvis, open Safari” does both in one
+breath. It answers aloud in a British voice and stops listening while it
+speaks, so it does not transcribe its replies (with one tab open).
+
+**Hands.** The webcam tracks your hand, body and face (14–18 fps measured live
+on a MacBook). Only the hand it is already following can drive; a second
+person's hand has to wait. Live, the hands have driven the 3D viewer. Desktop
+gestures are written but, on a Mac, wait on the Accessibility permission:
+point to move the cursor, pinch to click, pinch and move to drag, swipe to
+switch apps.
+
+**3D models in the air.** Say “show” and a part's name, and the part appears
+in the interface as a hologram. An open hand turns it; pushing toward or away
+from the camera zooms. It opens STL meshes, OpenSCAD files (CAD written as
+code) and STEP files (the standard format CAD programs exchange), with no CAD
+program open.
+
+**CAD edits by voice.** On an OpenSCAD part, “set rim thickness to 3” or “make
+the lenses bigger” rebuilds it in place: 0.16 s for a glasses frame. With
+Claude Code set up, changes a number cannot express go to Claude, which edits
+the OpenSCAD source or scripts a STEP assembly's named parts: on a 306-part
+engine assembly, “make the nozzle 20 percent longer” took its length from
+3,420 to 3,855 mm in 50 s, throat fixed. Each STEP edit is compared for size
+and photographed from three angles for the model to judge; one that looks
+wrong is undone and redone. The original file is untouched until “save”.
+
+**Control.** 43 actions: apps, windows, browser tabs, keyboard, mouse, media,
+volume, brightness, screenshots, clipboard, Shortcuts and system status. The
+voice parser, the gestures, the on-screen command index and the language model
+all call the same registry (on a Mac, its keyboard, mouse and window actions
+wait on the Accessibility permission).
+
+**Thought.** Common commands are matched on the machine with no model
+involved. Anything else goes to a language model (Qwen3 through Ollama, free
+and local, or Claude), which can call the same actions as tools. When a
+spoken name fits more than one dimension, it asks which one you meant.
+
+## Progress
+
+**22 September 2026, first commit → 24 September:** hand-driven 3D viewer,
+CAD edits by voice and through Claude, and installers for three systems (two
+not yet run).
+
+Measured during the build:
+
+| | before | after |
+|---|---|---|
+| Local model reply, “set the volume” (Qwen3 8B) | 8.4 s; “take a screenshot” timed out at 60 s | 1.4 s, same tool chosen (its reasoning step switched off) |
+| A question through Claude Code | 11.7 s | ~3 s (2.6–8 s measured), once run apart from the user's own Claude settings |
+| OpenSCAD rebuild, glasses frame | 5.9 s on the older CGAL geometry engine | 0.16 s on the newer Manifold engine |
+| OpenSCAD rebuild, a large machine assembly | unfinished after 10 minutes (CGAL) | 8 s (Manifold) |
+| CAD-mode drift from a hand held still (synthetic hands) | 35 px per frame | 2.5 px per frame, with a one-euro filter (smoothing that eases off as the hand speeds up) |
+| Shutdown with the interface open | over 20 s | 0.1 s |
+| Spoken commands dropped by the wake window, in 7 replayed from recordings | 2 of 7 | both cases fixed and covered by a regression test; the 7 recordings were not re-run after the fix |
+
+- A common command (“open Safari”, “what's my battery”) is matched in about
+  0.01 ms on an Apple M5 Pro. A model round trip takes 1–4 s locally, or ~3 s
+  with Claude. Shape edits through Claude take 20–90 s.
+- Test run on macOS, 18 October 2026: the seven suites that need no camera,
+  microphone, AI model or running server pass 152 checks with no failures.
+  The synthetic-hand gesture tests caught two real defects on the first day: a
+  pinch threshold that could never fire, and a fist that read as a pinch.
+- Actions 41 → 43 and test files 0 → 13 from the first commit to 24 September
+  (development history; this repository starts from a 23 September snapshot).
 
 ## Install
 
@@ -30,14 +104,13 @@ state of each with a button that asks for it. Press SETUP (or `p`) any time.
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Voice | Chrome or Edge | Chrome or Edge (Edge is built in) | Chrome or Edge |
-| Hand tracking | yes | yes | yes |
-| Keyboard, mouse, windows | after Accessibility | yes | X11 yes; Wayland does not allow it |
+| Hand tracking | yes | written, untested | written, untested |
+| Keyboard, mouse, windows | written; needs Accessibility | written, untested | X11 written, untested; Wayland does not allow it |
 | Local AI (free) | [Ollama](https://ollama.com/download), then DOWNLOAD in SETUP | same | same |
 
-Voice recognition runs in the browser, so what you say is transcribed by
-Google (Chrome) or Microsoft (Edge). The camera never leaves your machine. For
-answers beyond the fixed commands, install Ollama for a free local model, or
-set `ANTHROPIC_API_KEY` to use Claude. `.scad` files need
+Speech is transcribed in the browser, by Google (Chrome) or Microsoft (Edge);
+the camera never leaves your machine. For answers beyond the fixed commands,
+install Ollama for a free local model, or set `ANTHROPIC_API_KEY` for Claude. `.scad` files need
 [OpenSCAD](https://openscad.org); STEP files need the installer's
 `--with-step` option (CadQuery, about 1 GB).
 
@@ -46,525 +119,20 @@ Uninstall: `sh ~/Library/Application\ Support/JARVIS/install.sh --uninstall`
 Windows set `JARVIS_UNINSTALL=1` and run the install line again. Your model
 files are never touched.
 
-## From a checkout
-
-```
-./jarvis-run                 # everything
-./jarvis-run --no-vision     # no camera
-./jarvis-run --no-browser    # headless; open http://127.0.0.1:8420/ yourself
-```
-
----
-
-## What it does
-
-**Speech.** Say “Jarvis” and it wakes. Say “Jarvis, open Safari” and it does
-both in one breath. It replies aloud in a British voice and stops listening
-for exactly as long as it is speaking, so it never transcribes itself.
-
-**Control.** 41 actions across apps, windows, browser tabs, keyboard, mouse,
-media, volume, brightness, screenshots, clipboard, Shortcuts and telemetry.
-The full list is in the COMMAND INDEX panel, and clicking an entry runs it.
-
-**Gestures.** Hands and body are tracked at ~30 fps. Point to move the cursor,
-pinch to click, pinch and move to drag, swipe to switch apps, make a fist to
-close a window, hold an open palm to open a radial menu, thumbs up or down to
-answer a confirmation.
-
-**Thought.** Anything the local parser does not recognise goes to a language
-model, which can call every one of those 41 actions as tools.
-
----
-
-## First run
-
-### 1. Permissions
-
-Run this first — it checks what is granted and asks macOS for the rest:
-
-```bash
-cd ~/JARVIS && ./jarvis-run --permissions
-```
-
-**Run it from your own Terminal window, not from an editor or a detached
-shell.** macOS attaches a permission grant to whichever app it holds
-responsible for the process; a process started detached (`nohup`, `&`) has no
-responsible app, so the grant has nowhere to land and control silently no-ops.
-
-macOS will not let any of this work until you grant three things. Open
-**System Settings → Privacy & Security**:
-
-| Setting | Grant to | Without it |
-|---|---|---|
-| **Accessibility** | your terminal (Terminal, iTerm, VS Code…) | keyboard, mouse and window control silently do nothing |
-| **Camera** | the same app | no hand or body tracking |
-| **Microphone** | **Google Chrome** | no voice |
-
-The microphone belongs to Chrome, not to the terminal, because speech
-recognition runs in the HUD page. Chrome asks the first time; say yes.
-
-The HUD's CONTROL chip turns amber when Accessibility is missing, and the
-activity log says so explicitly. Accessibility only takes effect after you
-restart the terminal app.
-
-### 2. A model (optional)
-
-Without a key, J.A.R.V.I.S. still runs: the local intent parser handles the
-common commands. With one, it can answer anything and chain actions together.
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."    # put this in ~/.zshrc
-./jarvis-run
-```
-
-### 3. Say something
-
-Click the page once (Chrome will not open a microphone before you interact
-with it), then:
-
-> “Jarvis.” … “open Safari”
-> “Jarvis, what's my battery”
-> “Jarvis, snap window to the left”
-> “Jarvis, search for titanium alloys”
-
-Or type into the box at the bottom right — the text path is identical to the
-voice path, which makes it the easiest way to test anything.
-
----
-
-## Connecting your own AI
-
-`ai.backend` in `jarvis.json` picks the brain. They all use the same action
-registry as tools, so switching one out changes only how well and how fast the
-open questions get answered — the commands in the intent table are unaffected.
-
-Three of them need no API key. Pick on latency: a spoken question you are
-waiting on feels different at one second than at three.
-
-| backend | key | latency | RAM | notes |
-|---|---|---|---|---|
-| `ollama` | none | 1–4 s | ~6 GB while loaded | local, private, works offline |
-| `claude-code` | none | ~3 s | none | borrows your CLI login; much smarter |
-| `anthropic` | yes | ~2 s | none | best answers, billed per call |
-
-Two things decide whether a local model is usable, and both are set for you:
-
-- **`reasoning_effort: "none"`.** qwen3 deliberates before every answer. Left
-  on, setting the volume took 8.4 s and "take a screenshot" timed out
-  outright; off, it is 1.4 s and picks the same tool.
-- **`unload_after: 120`.** An 8B model holds ~6 GB resident and ollama keeps
-  it for five minutes after each question — `keep_alive` is accepted on the
-  OpenAI-compatible endpoint and ignored. On 16 GB also running the camera,
-  Chrome and the HUD that is most of the headroom, held for a conversation
-  that ended. Reloading costs 2.5 s, so it stays warm while you are talking
-  and hands the memory back when you stop.
-
-```jsonc
-// Claude (default) — direct API calls, needs ANTHROPIC_API_KEY.
-// Without the key this falls through to claude-code rather than going mute.
-{ "ai": { "backend": "anthropic", "model": "claude-sonnet-5" } }
-
-// A model on this machine. One-time: `ollama pull qwen3:8b`
-{ "ai": { "backend": "ollama", "local_model": "qwen3:8b" } }
-
-// Claude Code — uses your existing CLI login, no API key. The CLI is a
-// standalone binary; VS Code does not need to be open.
-{ "ai": { "backend": "claude-code" } }
-
-// Any other OpenAI-compatible endpoint — LM Studio, vLLM, a hosted provider
-{ "ai": { "backend": "openai", "base_url": "http://localhost:1234/v1",
-          "model": "llama3.1", "api_key_env": "OPENAI_API_KEY" } }
-
-// Your own program: JSON in on stdin, reply text out on stdout
-{ "ai": { "backend": "command", "command": ["python3", "/path/to/brain.py"] } }
-
-// No model at all; local intent parser only
-{ "ai": { "backend": "offline" } }
-```
-
-For `command`, stdin is `{"text": "...", "system": "..."}` and stdout is
-either bare text or `{"text": "..."}`.
-
-Write a config to edit with `./jarvis-run --write-config`; it lands in
-`jarvis.json` and every key in `jarvis/config.py` can be overridden there.
-
----
-
-## Gestures
-
-Gestures are **disarmed** by default, so a wave at the camera cannot quit an
-app. Arm them by holding an open palm to the camera for a second, saying
-“gesture control on”, clicking ARM, or pressing `g`.
-
-| Gesture | Does |
-|---|---|
-| index finger extended | moves the cursor |
-| pinch (thumb + index) | click |
-| pinch and move | drag |
-| both hands pinched, moving apart | zoom in / out |
-| open-palm swipe left / right | next / previous app |
-| open-palm swipe up / down | Mission Control / desktop |
-| fist | nothing — it is a resting shape, see below |
-| open palm held still | radial menu — point at a wedge, pinch to choose |
-| thumbs up / down | confirm / cancel a pending action |
-| peace sign | screenshot |
-
-Three things keep it from misfiring: arming, a stability requirement of four
-consecutive frames per pose, and a cooldown between discrete gestures. All of
-them are tunable under `gestures` in the config, and every binding is
-remappable to any action in the registry.
-
----
-
-## Safety
-
-Actions that are annoying to undo — `quit_app`, `lock_screen`, `sleep_display`,
-`run_shell` — stop and ask. The HUD raises a confirmation panel you can answer
-by voice (“yes” / “cancel”), by gesture (thumbs up / down), or by clicking.
-Edit `safety.confirm_actions` to add or remove entries.
-
-`run_shell` is disabled outright until you set `safety.allow_shell` to true.
-
----
-
-## Keys
-
-| Key | Does |
-|---|---|
-| `/` | focus the command box |
-| `Esc` | stop speaking, or dismiss a confirmation |
-| `g` | arm / disarm gestures |
-| `t` | cycle theme — Stark cyan, Mark 42 gold, combat red |
-| `c` | hide the real mouse cursor |
-| `h` | hand control drawer |
-| `shift+Q` | power down (confirms first) |
-
----
-
-## How it fits together
-
-```
-Chrome page ──microphone, speech recognition, speech synthesis, all visuals
-     │  websocket
-Python ──┬── intents.py    utterance → action, no model call, ~1 ms
-         ├── brain.py      everything else → model, with tool use
-         ├── tracker.py    camera → hand/body/face landmarks (worker thread)
-         ├── gestures.py   landmarks → gestures → actions
-         └── actions.py    the one place an action actually runs
-```
-
-Speech lives in the browser because that is the only way to have one object own
-both the microphone and the voice, which is what makes suspending recognition
-during replies exact rather than approximate.
-
-The action registry is the spine: adding one `@action` in
-`jarvis/control/actions.py` gives the language model a new tool, the gesture
-bindings a new target, and the HUD a new command-index entry, all at once.
-
-### Layout
-
-```
-jarvis/
-  config.py            defaults + jarvis.json + env overrides
-  bus.py               async pub/sub, thread-safe from the vision worker
-  server.py            static files, websocket, MJPEG camera feed
-  main.py              orchestration and utterance routing
-  control/macos.py     every macOS capability, plain and synchronous
-  control/actions.py   the registry and the confirm-gated dispatcher
-  vision/tracker.py    MediaPipe hands + pose + face
-  vision/gestures.py   arming, stability, hysteresis, swipes, radial menu
-  ai/intents.py        the local fast path
-  ai/brain.py          anthropic | openai | command | offline
-web/                   the HUD: index.html, css/, js/, vendored fonts
-tests/                 synthetic gesture tests, websocket round-trip test
-```
-
----
-
-## Tests
-
-```bash
-.venv/bin/python tests/test_gestures.py          # no camera needed
-./jarvis-run --no-vision --no-browser &          # then, against a live server:
-.venv/bin/python tests/test_roundtrip.py 8420
-```
-
-`test_gestures.py` builds MediaPipe-shaped hands in software for each pose and
-runs them through the real recogniser, so gesture logic can be changed and
-checked without ever opening the camera.
-
----
-
-## Troubleshooting
-
-**Nothing happens when it says it did something.** Accessibility is not
-granted, or was granted before the terminal was restarted.
-
-**It talks over itself / hears itself.** Only one HUD tab may be open. Close
-duplicates.
-
-**“camera would not open”.** Another app holds it, or Camera permission is
-missing for the terminal. `--no-vision` starts without it.
-
-**Speech does nothing.** Chrome only. Safari and Firefox have no usable
-`SpeechRecognition`; the typed command box works in any browser.
-
-**Wrong voice.** `speech.voice_hint` is matched against the browser's voice
-list. Run `speech.listVoices()` in the page console to see the options; for a
-better British voice, download an Enhanced one in System Settings → 
-Accessibility → Spoken Content → System Voice → Manage Voices.
-
----
-
-## Is it actually working?
-
-```bash
-curl -s http://127.0.0.1:8420/api/health | python3 -m json.tool
-```
-
-Reports, factually: whether the camera is running and has ever seen a hand,
-whether the HUD has a live microphone and how many voice commands have been
-transcribed, whether gestures are armed and how many have fired, and whether
-Accessibility is granted. The `problems` list names what is missing and what
-to do about it. Empty means everything is wired up.
-
-
----
-
-## Staying open
-
-The HUD is meant to stay up, so it resists being closed:
-
-* closing the window asks first (Chrome's "Leave site?" prompt);
-* if it goes away anyway, the backend reopens it after `server.relaunch_after`
-  seconds — long enough that a reload is not mistaken for a close;
-* after `server.max_relaunches` it gives up rather than fight you.
-
-Three deliberate ways out, none of which are second-guessed:
-
-| Way | How |
-|---|---|
-| the ⏻ button, top right | confirms, then powers down |
-| `shift+Q` | same |
-| voice | "shut down", "power down", "goodbye" |
-| the terminal | `Ctrl-C`, or `pkill -f jarvis.main` |
-
-"Shut down **Spotify**" still quits Spotify — only a bare "shut down" powers
-J.A.R.V.I.S. down.
-
-Set `server.persist_hud` to false to turn all of this off.
-
-
----
-
-## The model viewer
-
-Say "show the worm" (or "open astrowilly cad") and the part appears inside the
-interface as a hologram, on a grid, and you turn it with your hands. Nothing
-else has to be installed or open: STL is read directly, and a `.scad` file is
-compiled to STL on the spot, so the part you are turning is the current
-source, and a STEP export (what Onshape produces) is converted the first time
-it is asked for and cached after that. `m` opens the viewer with a search box;
-every STL, SCAD and STEP under the configured roots is indexed by name.
-
-| hand | does |
-|---|---|
-| open hand, moved | turns the model |
-| open hand pulled toward the camera, or fingers closing | zooms in |
-| open hand pushed away, or fingers opening | zooms out |
-| pinch and move | turns |
-| two fingers | slides |
-| index out, thumb and finger apart or together | zooms |
-| both palms apart or together | zooms |
-
-The camera sits in a small box in the corner while the viewer is up, so the
-hand doing the turning stays in view (and in a screen recording). While the
-viewer is open an open palm belongs to the model: it neither switches apps
-nor opens the radial menu.
-
-Only your hands drive. The hand already being followed keeps control even if
-a bigger hand appears, a second person's hand cannot take over until yours has
-been out of frame for a second, and a second hand counts as yours only when it
-is the other hand, near the first, and about the same size. Commands survive
-other people talking: "show the worm, ok so anyway" still shows the worm.
-
-Zoom holds where it is the moment your hand touches the edge of the frame
-instead of springing back, and goes in until the camera is at the surface.
-
-## Editing the model live
-
-An OpenSCAD part is a program whose top-level numbers are its dimensions
-(`rim_t = 3.5;`), so JARVIS can change them without a CAD application. When a
-`.scad` model is on screen a panel lists those numbers with sliders, and the
-part is rebuilt with `openscad -D name=value` on OpenSCAD's Manifold engine and
-swapped in place, same camera, same scale, so a longer part looks longer.
-The glasses frame rebuilds in about 0.1 s, most parts in about a second, the
-whole MITE in 8 s. While a slider or a hand is moving only the latest value is
-built; a new build stops the one in flight.
-
-| say | does |
-|---|---|
-| "set rim thickness to 3" | sets a dimension (the spoken name only has to be close) |
-| "make the wall thicker", "make it a bit shorter" | 10% either way (a count: one) |
-| "increase lens width by 2 mm", "reduce the gap by 20 percent" | by an amount |
-| "turn on explode" | switches a true/false setting |
-| "adjust the bridge gap" | picks it for the hand: pinch and move up or down |
-| "done" | lets go of it |
-| "what can I change" | reads out the dimensions |
-| "undo" | takes back the last edit (a whole drag is one edit) |
-| "reset changes" | back to the file as saved |
-| "save" | writes the numbers into the `.scad` |
-
-When a name fits more than one dimension JARVIS asks instead of guessing:
-"make the lenses bigger" gets "lens width, lens height, or lens radius?", and
-the answer can be a name ("the height"), a position ("the first one"),
-several ("width and height") or "all of them". A describing word settles it
-when it can: "make the temples longer" can only mean temple length.
-
-Requests that are not a fixed phrase ("make the glasses fit a wider face",
-"how would I make the frame sturdier") go to Claude through your Claude Code
-login, with the part's dimensions and the last few exchanges, so "yes, do it"
-after its suggestion works. It answers in 3 to 8 seconds; a question gets an
-answer and an offer, and only a request changes the part. If Claude Code is
-not installed or does not answer, the local model (Ollama, started
-automatically) takes over. `ai.smart_backend: "off"` keeps everything local.
-
-"Make it smooth" (or "smoother", "higher detail", "less faceted") turns on
-smooth shading that keeps sharp edges sharp, and converts a STEP file again
-at finer detail: facets of 14 degrees instead of 26, 2.5 times the
-triangles, a few seconds. Asking to reshape a STEP or STL gets a plain
-answer: its shape is fixed here, and it can be turned, zoomed or smoothed.
-
-### Changing the shape itself
-
-Some changes are not a number: "add a 3 mm hole through each temple arm",
-"make the nozzle 20 percent longer", "remove the gimbal". Those go to Claude
-(through the Claude Code login), which writes the edit; JARVIS builds it,
-sends any build error back for one repair, and shows the result. It takes
-20 to 50 seconds, and JARVIS says "Working on it" first. If the request is
-unclear Claude asks, and the answer goes back to it.
-
-- **OpenSCAD** parts: Claude edits the source (new features become named
-  variables where it can). The edited source lives in memory and compiles from
-  a hidden file beside the original, so includes still resolve; dimension edits
-  layer on top, and "undo" steps back through both in order.
-- **STEP** assemblies (the Mark IV exports from Onshape): there are no
-  dimensions, so Claude writes a short script over the named parts: move,
-  rotate, scale, stretch along an axis holding one end, delete, add, copy,
-  mirror, cut, join, fillet. It runs in the CadQuery interpreter
-  (`jarvis/step_tool.py`) with no imports and no file or system access; the
-  script is checked before it runs. The original export is never written:
-  "save" writes `<name>-jarvis-<date>.step` beside it, with an
-  `.edits.txt` listing every edit and its script, and part names intact.
-
-The file on disk is untouched until "save", which rewrites only the number on
-each changed line, keeps the comments, and first copies the original to
-`build/scad_backups/`. With no editable model open, "undo" and "save" are
-Cmd-Z and Cmd-S for the front app. STEP and STL are finished geometry with no
-dimensions in them, so they can be turned and zoomed but not edited.
-
-## CAD mode
-
-Orbit, pan and zoom are what a 3D viewport needs constantly, and they are what
-a hand does better than a mouse. Say **"CAD mode"** to enter, make a fist or
-say **"exit CAD mode"** to leave.
-
-| Hand | Viewport |
-|---|---|
-| pinch + move | orbit |
-| two fingers + move | pan |
-| open palm + move up/down | zoom (one-handed) |
-| both hands pinched, moving apart | zoom |
-| fist | leave CAD mode |
-| say "fit" | zoom to fit, where the app has a shortcut |
-
-Two things make it usable in a real application rather than a demo:
-
-**Movement is relative.** The cursor is never warped to your hand. When a drag
-starts, wherever the cursor already is becomes the anchor, and the hand only
-supplies deltas. Put the pointer in the viewport once and then forget about it.
-
-**Profiles per application.** Every package orbits with a different button, so
-the frontmost app is looked up and the same gesture does the right thing:
-
-| Application | Orbit | Pan |
-|---|---|---|
-| OpenSCAD | left-drag | right-drag |
-| Blender | middle | shift+middle |
-| Fusion 360 | shift+middle | middle |
-| SolidWorks | middle | ctrl+middle |
-| Rhino | right | shift+right |
-| Onshape and other browser CAD | left | right |
-| anything else | middle | shift+middle |
-
-Sensitivity is `cad.orbit_gain`, `cad.pan_gain` and `cad.zoom_gain` in
-`jarvis.json` — pixels of drag per frame-width of hand travel. Add an
-application by editing `PROFILES` in `jarvis/vision/cad.py`.
-
-Like every other gesture, this synthesises mouse events, so it does nothing
-until Accessibility is granted.
-
----
-
-## If control never turns on
-
-Ticking your terminal is not enough, and the reason is not obvious.
-
-`.venv/bin/python3` normally symlinks Apple's own `com.apple.python3`, whose
-signature reads `Authority=Software Signing`. macOS calls that a *platform
-binary* and makes it its **own responsible process**, so it cannot inherit an
-Accessibility grant from the terminal that launched it. Nothing you tick in
-that list will reach it.
-
-Two steps fix it:
-
-```bash
-./fix-control-permission.sh     # re-sign the interpreter (reversible: --undo)
-open ~/JARVIS                   # then drag JARVIS.app into Accessibility
-```
-
-`JARVIS.app` is a real bundle with its own identifier, so macOS can attribute
-it, and it becomes the responsible process for everything it launches. Run the
-assistant from it:
-
-```bash
-open -a ~/JARVIS/JARVIS.app
-```
-
-Prove control at any time:
-
-```bash
-./check-control.sh
-```
-
-It moves the cursor, reads the position back, restores it, and exercises the
-middle-button drag CAD orbit needs. It reports how it was launched, because a
-grant given to the bundle does not apply to a plain shell process.
-
-
----
-
-## Turning gesture control on and off
-
-Use the **GESTURES** switch in the top bar, the `g` key, or say "gesture
-control on" / "off". Holding an open palm to the camera also turns it on.
-
-**No hand shape turns it off.** That is deliberate. Every closed-hand shape is
-also a *resting* shape — a chin propped on a fist, a hand lowered out of frame,
-a hand caught mid-transition between poses — so a gesture bound to "off"
-switches itself off while you sit still. It did exactly that, about a second
-after being switched on, and again whenever an arm was lowered.
-
-The switch shows three states:
-
-| | |
-|---|---|
-| green **ON** | on, and able to move things |
-| amber **ON** | on, but macOS control permission is missing, so nothing will move |
-| grey **OFF** | off |
-
-Switching it on deliberately keeps it on. Only a palm-hold arm times out, and
-only after `gestures.disarm_after_idle` with no hand seen at all.
+Checkout, permissions, AI backends, every gesture and command, troubleshooting:
+[docs/MANUAL.md](docs/MANUAL.md).
+
+## Status
+
+- **Run live on macOS:** camera hand tracking, the hand-driven 3D viewer,
+  voice in and out, Claude, and the local Qwen3 fallback.
+- **Mac keyboard, mouse and window control** (gesture cursor, clicks, app
+  switching, CAD mode in other applications): written, waiting on macOS's
+  Accessibility permission, which has not been granted on the test Mac. See
+  [If control never turns on](docs/MANUAL.md#if-control-never-turns-on).
+- **Windows and Linux:** control backends and one-line installers are written;
+  neither has been run on a real machine.
+- Written with AI coding agents under Dylan Leitenberg's direction.
 
 ## License
 
